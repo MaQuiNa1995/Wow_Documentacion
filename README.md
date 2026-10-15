@@ -13,4 +13,4 @@ No requiere dependencias ni proceso de compilación. Las notas guardadas se alma
 
 ## Publicar en GitHub Pages
 
-En el repositorio, abre **Settings → Pages** y configura **Deploy from a branch**, seleccionando `main` y la carpeta `/(root)`. Guarda los cambios; GitHub Pages publicará el sitio desde `index.html`.
+En el repositorio, abre **Settings → Pages** y configura **Deploy from a branch**, seleccionando `master` y la carpeta `/(root)`. Guarda los cambios; GitHub Pages publicará el sitio desde `index.html`.
