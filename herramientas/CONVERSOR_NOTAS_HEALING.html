@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Edita preferencias de avisos de CD en una nota de NSRT.">
+  <title>Ajustar notas de CD · NSRT</title>
+  <link rel="stylesheet" href="../Wow_healers/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="../index.html">WOW <span>UTILIDADES</span></a><a href="NOTAS_GUARDADAS.html">Visualizar notas guardadas</a><a href="../index.html">Volver al índice</a></div></header>
+  <div class="wrap tool-shell">
+    <header class="page-head">
+      <p class="eyebrow">Herramienta local · NSRT</p>
+      <h1>Ajustar notas de CD</h1>
+      <p class="intro">Pega la nota, elige el jugador y la preferencia. La página cambia solo sus avisos y conserva el resto.</p>
+    </header>
+
+    <main class="tool-workbench">
+      <label for="noteInput">Nota completa</label>
+      <textarea id="noteInput" spellcheck="false" placeholder="Pega aquí la nota completa de NSRT..."></textarea>
+      <div id="noteEditorControls" hidden>
+      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas.</p>
+
+      <div class="tool-controls">
+        <div>
+          <label for="playerSelect">Jugador / etiqueta que modificar</label>
+          <select id="playerSelect" disabled>
+            <option value="">Pega primero una nota</option>
+          </select>
+        </div>
+      </div>
+      <div id="preferenceRows"></div>
+      <template id="preferenceRowTemplate">
+        <div class="tool-controls preference-row" data-preference-row>
+          <div>
+            <label>Preferencia</label>
+            <select class="preference-select" disabled>
+              <option value="dur">dur · duración (segundos)</option>
+              <option value="TTS">TTS · voz o texto hablado</option>
+              <option value="sound">sound · sonido</option>
+              <option value="colors">colors · color del aviso</option>
+              <option value="glowunit">glowunit · iluminar marco</option>
+              <option value="bossSpell">bossSpell · icono de hechizo del jefe</option>
+              <option value="TTSTimer">TTSTimer · momento de voz</option>
+              <option value="countdown">countdown · cuenta atrás</option>
+              <option value="DisplayType">DisplayType · presentación</option>
+            </select>
+          </div>
+          <div>
+            <label>Valor</label>
+            <input class="preference-value" type="number" min="0" step="1" inputmode="numeric" disabled>
+          </div>
+          <button class="secondary remove-preference-button" type="button" aria-label="Quitar preferencia" title="Quitar preferencia" hidden disabled>-</button>
+          <p class="tool-help preference-help"></p>
+        </div>
+      </template>
+      <div class="tool-buttons">
+        <button id="addPreferenceButton" class="secondary" type="button" disabled>+ Añadir preferencia</button>
+        <button id="applyButton" type="button" disabled>Aplicar preferencias</button>
+      </div>
+      <p id="status" class="tool-status" role="status" aria-live="polite">Pega una nota para empezar.</p>
+
+      <div id="modifiedNoteSection" class="tool-result" hidden>
+        <label for="noteOutput">Nota modificada</label>
+        <textarea id="noteOutput" spellcheck="false" placeholder="El resultado aparecerá aquí..." readonly></textarea>
+        <div class="tool-buttons">
+          <button id="copyButton" class="secondary" type="button" disabled>Copiar nota</button>
+          <button id="resetButton" class="secondary" type="button" disabled>Reiniciar</button>
+        </div>
+      </div>
+
+      <details class="tool-result save-note-accordion">
+        <summary id="saveNoteTitle">Guardar nota</summary>
+        <p class="tool-help">Se guarda solo en este navegador. El nombre se genera con el jefe y la dificultad de los metadatos NSRT.</p>
+        <div class="tool-controls">
+          <div>
+            <label for="savedNoteName">Jefe y dificultad</label>
+            <input id="savedNoteName" type="text" placeholder="Se detectan en los metadatos de la nota" readonly>
+          </div>
+          <button id="saveNewNoteButton" type="button" disabled>Guardar como nueva</button>
+        </div>
+        <div class="tool-buttons">
+          <button id="saveChangesButton" type="button" disabled>Guardar cambios</button>
+          <button id="cancelEditButton" class="secondary" type="button" disabled>Cancelar edición</button>
+          <button id="deleteCurrentNoteButton" class="secondary" type="button" disabled>Eliminar nota</button>
+        </div>
+        <p id="savedNoteStatus" class="tool-status" role="status" aria-live="polite">Pega una nota para empezar.</p>
+      </details>
+
+      <p class="tool-note"><strong>Importante:</strong> se modifica cada línea de aviso cuya etiqueta <code>tag:</code> coincida con el jugador elegido. Mantén un aviso por línea. La línea <code>EncounterID</code> y las demás líneas quedan intactas.</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const noteInput = document.getElementById("noteInput");
+      const noteOutput = document.getElementById("noteOutput");
+      const modifiedNoteSection = document.getElementById("modifiedNoteSection");
+      const noteEditorControls = document.getElementById("noteEditorControls");
+      const playerSelect = document.getElementById("playerSelect");
+      const preferenceRows = document.getElementById("preferenceRows");
+      const preferenceRowTemplate = document.getElementById("preferenceRowTemplate");
+      const addPreferenceButton = document.getElementById("addPreferenceButton");
+      const status = document.getElementById("status");
+      const applyButton = document.getElementById("applyButton");
+      const copyButton = document.getElementById("copyButton");
+      const resetButton = document.getElementById("resetButton");
+      const savedNoteName = document.getElementById("savedNoteName");
+      const saveNewNoteButton = document.getElementById("saveNewNoteButton");
+      const saveChangesButton = document.getElementById("saveChangesButton");
+      const cancelEditButton = document.getElementById("cancelEditButton");
+      const deleteCurrentNoteButton = document.getElementById("deleteCurrentNoteButton");
+      const savedNoteStatus = document.getElementById("savedNoteStatus");
+
+      let originalNote = "";
+      let currentNote = "";
+      let editingNoteId = "";
+      let nextPreferenceRowId = 0;
+      const maxPreferenceRows = 8;
+      const savedNotesStorageKey = "wow-utilidades-nsrt-saved-notes-v1";
+      let savedNotes = [];
+
+      const encounterNames = {
+        3159: "Rotmire",
+        3176: "Imperator Averzian",
+        3177: "Vorasius",
+        3178: "Vaelgor & Ezzorak",
+        3179: "Fallen-King Salhadaar",
+        3180: "Lightblinded Vanguard",
+        3181: "Crown of the Cosmos",
+        3182: "Belo'ren",
+        3183: "Midnight Falls",
+        3306: "Chimaerus",
+        3379: "Nymrissa Wavecaller",
+        3420: "Sszorak",
+        3421: "The Twin Fangs",
+        3429: "The Coiled Altar",
+        3445: "Entombed Sentinels",
+        3455: "Vashnik the Malignant",
+        3470: "Nek'zali the Soulcoiler",
+        3492: "Ula'tek",
+        3497: "The Lost Explorers"
+      };
+
+      const preferenceHelp = {
+        dur: "Segundos que dura el aviso.",
+        TTS: "Escribe false, true o el texto que quieres que diga la voz.",
+        sound: "Nombre de un sonido registrado en NSRT o ruta de archivo.",
+        colors: "Componentes numéricos RGB o RGBA, separados por espacios o dos puntos.",
+        glowunit: "Nombre o unidad de marco que brillará; separa varios con espacios.",
+        bossSpell: "ID numérico válido del hechizo del jefe cuyo icono quieres mostrar.",
+        TTSTimer: "Segundos antes del evento para reproducir la voz.",
+        countdown: "Segundos para la cuenta atrás de voz.",
+        DisplayType: "Elige Text, Bar, Icon o Circle."
+      };
+
+      function getSavedNoteName(note) {
+        const firstLine = note.split(/\r?\n/, 1)[0] || "";
+        const encounterMatch = firstLine.match(/(?:^|;)EncounterID:(\d+)(?=;|$)/i);
+        const difficultyMatch = firstLine.match(/(?:^|;)Difficulty:([^;\r\n]+)/i);
+        if (!encounterMatch || !difficultyMatch || !difficultyMatch[1].trim()) return "";
+        const encounterId = Number(encounterMatch[1]);
+        if (!encounterId) return "";
+        const bossName = encounterNames[encounterId] || `Encuentro ${encounterId}`;
+        return `${bossName} · ${difficultyMatch[1].trim()}`;
+      }
+
+      function setSavedNoteStatus(message, isError = false) {
+        savedNoteStatus.textContent = message;
+        savedNoteStatus.classList.toggle("error", isError);
+      }
+
+      function readSavedNotes() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(savedNotesStorageKey) || "[]");
+          if (!Array.isArray(parsed)) return [];
+          return parsed.filter(note => note
+            && typeof note.id === "string"
+            && typeof note.name === "string"
+            && typeof note.content === "string");
+        } catch {
+          setSavedNoteStatus("No se puede acceder al almacenamiento de este navegador.", true);
+          return [];
+        }
+      }
+
+      function persistSavedNotes() {
+        try {
+          localStorage.setItem(savedNotesStorageKey, JSON.stringify(savedNotes));
+          return true;
+        } catch {
+          setSavedNoteStatus("No se pudo guardar. Comprueba el espacio disponible o los permisos del navegador.", true);
+          return false;
+        }
+      }
+
+      function updateSavedNoteButtons() {
+        const hasContent = Boolean((currentNote || noteInput.value).trim());
+        saveNewNoteButton.disabled = !savedNoteName.value.trim() || !hasContent;
+        saveChangesButton.disabled = !editingNoteId || !savedNoteName.value.trim() || !hasContent;
+        cancelEditButton.disabled = !editingNoteId;
+        deleteCurrentNoteButton.disabled = !editingNoteId;
+      }
+
+      function getPreferenceRows() {
+        return [...preferenceRows.querySelectorAll("[data-preference-row]")];
+      }
+
+      function updatePreferenceRow(row, resetValue = false) {
+        const preferenceSelect = row.querySelector(".preference-select");
+        const preferenceValue = row.querySelector(".preference-value");
+        const preference = preferenceSelect.value;
+        preferenceValue.type = ["dur", "TTSTimer", "countdown", "bossSpell"].includes(preference) ? "number" : "text";
+        preferenceValue.min = preference === "bossSpell" ? "1" : "0";
+        preferenceValue.step = "1";
+        if (resetValue) preferenceValue.value = preference === "dur" ? "20" : "";
+        else if (preference === "dur" && !preferenceValue.value && !playerSelect.disabled) preferenceValue.value = "20";
+        preferenceValue.placeholder = preference === "DisplayType" ? "Text / Bar / Icon / Circle" : "Valor";
+        if (preference === "TTS") preferenceValue.placeholder = "false, true o frase";
+        if (preference === "sound") preferenceValue.placeholder = "Nombre o ruta del sonido";
+        if (preference === "colors") preferenceValue.placeholder = "1 0.5 0 o 1:0.5:0:1";
+        if (preference === "glowunit") preferenceValue.placeholder = "player, raid1 o nombre";
+        row.querySelector(".preference-help").textContent = preferenceHelp[preference];
+      }
+
+      function updatePreferenceRowAvailability() {
+        const rows = getPreferenceRows();
+        const hasTags = !playerSelect.disabled;
+        for (const row of rows) {
+          row.querySelector(".preference-select").disabled = !hasTags;
+          row.querySelector(".preference-value").disabled = !hasTags;
+          const removeButton = row.querySelector(".remove-preference-button");
+          removeButton.hidden = rows.length < 2;
+          removeButton.disabled = !hasTags || rows.length === 1;
+        }
+        addPreferenceButton.disabled = !hasTags || rows.length >= maxPreferenceRows;
+        applyButton.disabled = !hasTags || !playerSelect.value;
+      }
+
+      function addPreferenceRow() {
+        if (getPreferenceRows().length >= maxPreferenceRows) return;
+        const row = preferenceRowTemplate.content.firstElementChild.cloneNode(true);
+        const rowId = ++nextPreferenceRowId;
+        const preferenceSelect = row.querySelector(".preference-select");
+        const preferenceValue = row.querySelector(".preference-value");
+        preferenceSelect.id = `preferenceSelect-${rowId}`;
+        preferenceValue.id = `preferenceValue-${rowId}`;
+        row.querySelector("label").htmlFor = preferenceSelect.id;
+        row.querySelectorAll("label")[1].htmlFor = preferenceValue.id;
+        preferenceSelect.addEventListener("change", () => updatePreferenceRow(row, true));
+        preferenceRows.append(row);
+        updatePreferenceRow(row);
+        updatePreferenceRowAvailability();
+      }
+
+      function getWorkingNote() {
+        return currentNote || noteInput.value;
+      }
+
+      function createNoteId() {
+        return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+
+      function updateEditRoute(noteId) {
+        const url = new URL(window.location.href);
+        if (noteId) url.searchParams.set("edit", noteId);
+        else url.searchParams.delete("edit");
+        window.history.replaceState(null, "", url);
+      }
+
+      function isReminderLine(line) {
+        return /(?:^|;)tag:[^;\r\n]+/i.test(line)
+          && /(?:^|;)time:-?\d+(?:\.\d+)?(?:;|$)/i.test(line)
+          && /(?:^|;)(?:text:[^;\r\n]+|spellid:\d+)(?:;|$)/i.test(line);
+      }
+
+      function getTags(note) {
+        const tags = new Set();
+        for (const line of note.split(/\r?\n/)) {
+          if (!isReminderLine(line)) continue;
+          const tagMatch = line.match(/(?:^|;)tag:([^;\r\n]+)/i);
+          if (!tagMatch) continue;
+          for (const tag of tagMatch[1].trim().split(/\s+/)) {
+            if (tag) tags.add(tag);
+          }
+        }
+        return [...tags].sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
+      }
+
+      function updatePlayerOptions(note) {
+        const previousPlayer = playerSelect.value;
+        const tags = getTags(note);
+        playerSelect.replaceChildren();
+        if (tags.length === 0) {
+          playerSelect.add(new Option("No se encontraron etiquetas", ""));
+          playerSelect.disabled = true;
+          for (const row of getPreferenceRows()) row.querySelector(".preference-value").value = "";
+          updatePreferenceRowAvailability();
+          return;
+        }
+        playerSelect.add(new Option("Elige jugador / etiqueta", ""));
+        for (const tag of tags) playerSelect.add(new Option(tag, tag));
+        playerSelect.disabled = false;
+        if (tags.includes(previousPlayer)) playerSelect.value = previousPlayer;
+        else if (tags.length === 1) playerSelect.value = tags[0];
+        for (const row of getPreferenceRows()) updatePreferenceRow(row);
+        updatePreferenceRowAvailability();
+      }
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.classList.toggle("error", isError);
+      }
+
+      function validateValue(preference, value) {
+        if (!value.trim()) return "Escribe un valor para la preferencia.";
+        if (/[;\r\n]/.test(value)) return "El valor no puede contener punto y coma ni saltos de línea.";
+        if (["dur", "TTSTimer", "countdown", "bossSpell"].includes(preference)
+          && !/^\d+$/.test(value)) {
+          return preference === "bossSpell"
+            ? "Introduce un ID de hechizo entero."
+            : "Introduce un número entero de segundos igual o mayor que 0.";
+        }
+        if (preference === "bossSpell" && Number(value) === 0) {
+          return "El ID del hechizo debe ser mayor que 0.";
+        }
+        if (preference === "colors") {
+          const components = value.match(/[^\s:]+/g) || [];
+          if (components.length === 0 || components.some(component => !Number.isFinite(Number(component)))) {
+            return "Usa componentes numéricos separados por espacios o dos puntos.";
+          }
+        }
+        if (preference === "DisplayType" && !["Text", "Bar", "Icon", "Circle"].includes(value)) {
+          return "Usa Text, Bar, Icon o Circle.";
+        }
+        return "";
+      }
+
+      function replaceOrAppend(line, preference, value) {
+        const fieldPattern = new RegExp(`(^|;)(${preference}):[^;\\r\\n]*`, "i");
+        if (fieldPattern.test(line)) {
+          return line.replace(fieldPattern, (_match, separator, fieldName) => `${separator}${fieldName}:${value}`);
+        }
+        const separator = line.endsWith(";") ? "" : ";";
+        return `${line}${separator}${preference}:${value}`;
+      }
+
+      playerSelect.addEventListener("change", updatePreferenceRowAvailability);
+      addPreferenceButton.addEventListener("click", addPreferenceRow);
+      preferenceRows.addEventListener("click", event => {
+        const removeButton = event.target.closest(".remove-preference-button");
+        if (!removeButton || getPreferenceRows().length <= 1) return;
+        removeButton.closest("[data-preference-row]").remove();
+        updatePreferenceRowAvailability();
+      });
+
+      noteInput.addEventListener("input", () => {
+        originalNote = noteInput.value;
+        currentNote = originalNote;
+        savedNoteName.value = getSavedNoteName(originalNote);
+        noteOutput.value = "";
+        modifiedNoteSection.hidden = true;
+        updatePlayerOptions(originalNote);
+        copyButton.disabled = true;
+        resetButton.disabled = true;
+        const count = getTags(originalNote).length;
+        noteEditorControls.hidden = count === 0;
+        setStatus(count ? `${count} jugador(es)/etiqueta(s) detectado(s).` : "No se encontraron avisos con tag, time y text/spellid.", count === 0);
+        updateSavedNoteButtons();
+        if (originalNote.trim() && !savedNoteName.value) {
+          setSavedNoteStatus("No se encontraron jefe y dificultad en los metadatos de la primera línea.", true);
+        } else if (savedNoteName.value) {
+          setSavedNoteStatus(editingNoteId ? `Editando «${savedNoteName.value}».` : `Nombre detectado: «${savedNoteName.value}».`);
+        } else {
+          setSavedNoteStatus("Pega una nota para empezar.");
+        }
+      });
+
+      saveNewNoteButton.addEventListener("click", () => {
+        const name = savedNoteName.value.trim();
+        const content = getWorkingNote();
+        if (!name || !content.trim()) return;
+        const now = new Date().toISOString();
+        const note = { id: createNoteId(), name, content, createdAt: now, updatedAt: now };
+        savedNotes.push(note);
+        if (!persistSavedNotes()) {
+          savedNotes.pop();
+          return;
+        }
+        editingNoteId = note.id;
+        updateEditRoute(note.id);
+        updateSavedNoteButtons();
+        setSavedNoteStatus(`Nota «${name}» guardada.`);
+      });
+
+      saveChangesButton.addEventListener("click", () => {
+        const note = savedNotes.find(item => item.id === editingNoteId);
+        const name = savedNoteName.value.trim();
+        const content = getWorkingNote();
+        if (!note || !name || !content.trim()) return;
+        const previousNote = { ...note };
+        note.name = name;
+        note.content = content;
+        note.updatedAt = new Date().toISOString();
+        if (!persistSavedNotes()) {
+          Object.assign(note, previousNote);
+          return;
+        }
+        updateSavedNoteButtons();
+        setSavedNoteStatus(`Cambios de «${name}» guardados.`);
+      });
+
+      cancelEditButton.addEventListener("click", () => {
+        editingNoteId = "";
+        updateEditRoute("");
+        updateSavedNoteButtons();
+        setSavedNoteStatus("Edición cancelada. La nota guardada no se ha modificado.");
+      });
+
+      deleteCurrentNoteButton.addEventListener("click", () => {
+        const note = savedNotes.find(item => item.id === editingNoteId);
+        if (!note || !window.confirm(`¿Eliminar la nota «${note.name}» de este navegador?`)) return;
+        const previousNotes = savedNotes;
+        savedNotes = savedNotes.filter(item => item.id !== note.id);
+        if (!persistSavedNotes()) {
+          savedNotes = previousNotes;
+          return;
+        }
+        editingNoteId = "";
+        updateEditRoute("");
+        updateSavedNoteButtons();
+        setSavedNoteStatus(`Nota «${note.name}» eliminada.`);
+      });
+
+      applyButton.addEventListener("click", () => {
+        const player = playerSelect.value;
+        if (!currentNote) return setStatus("Pega primero la nota completa.", true);
+        if (!player) return setStatus("Elige el jugador o etiqueta que quieres modificar.", true);
+        const preferences = getPreferenceRows().map((row, index) => ({
+          index: index + 1,
+          preference: row.querySelector(".preference-select").value,
+          value: row.querySelector(".preference-value").value.trim()
+        }));
+        const seenPreferences = new Set();
+        for (const item of preferences) {
+          if (seenPreferences.has(item.preference)) {
+            return setStatus(`La preferencia ${item.preference} aparece más de una vez.`, true);
+          }
+          seenPreferences.add(item.preference);
+          const validationError = validateValue(item.preference, item.value);
+          if (validationError) return setStatus(`Preferencia ${item.index}: ${validationError}`, true);
+        }
+
+        let changed = 0;
+        const lines = currentNote.split(/(\r?\n)/);
+        for (let index = 0; index < lines.length; index += 2) {
+          const line = lines[index];
+          if (!isReminderLine(line)) continue;
+          const tagMatch = line.match(/(?:^|;)tag:([^;\r\n]+)/i);
+          const lineTags = tagMatch ? tagMatch[1].trim().split(/\s+/) : [];
+          if (!lineTags.some(tag => tag.toLocaleLowerCase() === player.toLocaleLowerCase())) continue;
+          for (const item of preferences) {
+            lines[index] = replaceOrAppend(lines[index], item.preference, item.value);
+          }
+          changed += 1;
+        }
+
+        if (changed === 0) return setStatus(`No encontré avisos de ${player} para modificar.`, true);
+        currentNote = lines.join("");
+        noteOutput.value = currentNote;
+        modifiedNoteSection.hidden = false;
+        updatePlayerOptions(currentNote);
+        playerSelect.value = player;
+        copyButton.disabled = false;
+        resetButton.disabled = false;
+        setStatus(`${preferences.length} preferencia(s) aplicada(s) a ${changed} aviso(s) de ${player}.`);
+      });
+
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(noteOutput.value);
+          setStatus("Nota modificada copiada.");
+        } catch {
+          noteOutput.focus();
+          noteOutput.select();
+          setStatus("Seleccioné la nota; cópiala con Ctrl+C.");
+        }
+      });
+
+      resetButton.addEventListener("click", () => {
+        currentNote = originalNote;
+        noteOutput.value = "";
+        modifiedNoteSection.hidden = true;
+        updatePlayerOptions(originalNote);
+        copyButton.disabled = true;
+        resetButton.disabled = true;
+        setStatus("Cambios reiniciados. Puedes aplicar otra preferencia.");
+      });
+
+      savedNotes = readSavedNotes();
+      const requestedNoteId = new URLSearchParams(window.location.search).get("edit");
+      addPreferenceRow();
+      const requestedNote = savedNotes.find(note => note.id === requestedNoteId);
+      if (requestedNote) {
+        editingNoteId = requestedNote.id;
+        noteInput.value = requestedNote.content;
+        noteInput.dispatchEvent(new Event("input", { bubbles: true }));
+        setSavedNoteStatus(`Editando «${requestedNote.name}». Guarda los cambios al terminar.`);
+      } else {
+        updateSavedNoteButtons();
+        if (requestedNoteId) setSavedNoteStatus("La nota solicitada ya no está guardada en este navegador.", true);
+      }
+    })();
+  </script>
+</body>
+</html>

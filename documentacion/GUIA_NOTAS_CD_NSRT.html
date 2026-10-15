@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Guía rápida de notas de cooldowns en Northern Sky Raid Tools.">
+  <title>Notas de CDs en NSRT</title>
+  <link rel="stylesheet" href="../Wow_healers/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="../index.html">WOW <span>UTILIDADES</span></a><a href="../index.html">Volver al índice</a></div></header>
+  <div class="wrap tool-page">
+    <header class="page-head">
+      <p class="eyebrow">Notas de raid · Guía directa</p>
+      <h1>Prepara tus avisos de CDs y defensivos</h1>
+      <p class="intro">Una línea por aviso. Organiza cooldowns de healing, defensivos y otros avisos por jugador y momento.</p>
+    </header>
+    <nav class="note-guide-nav" aria-label="Secciones de la guía">
+      <a href="#linea">La nota</a><a href="#utilidad">La utilidad</a><a href="#juego">En el juego</a>
+    </nav>
+    <main class="note-guide">
+      <section id="linea" class="note-guide-example" aria-labelledby="lineaTitle">
+        <div>
+          <p class="eyebrow">La nota, en claro</p>
+          <h2 id="lineaTitle">Una línea es un aviso</h2>
+          <p>Este ejemplo avisa a una healer para usar un cooldown cerca del segundo 45.</p>
+          <pre><code>tag:Maquisuna;time:45;text:Palabra de poder: Barrera;dur:8</code></pre>
+        </div>
+        <ul class="note-guide-fields">
+          <li><code>tag</code><span>A quién va el aviso.</span></li>
+          <li><code>time</code><span>En qué segundo del combate.</span></li>
+          <li><code>text</code><span>El mensaje que aparecerá.</span></li>
+          <li><code>dur</code><span>Cuántos segundos antes avisar. Con 45 y 8, avisa en el segundo 37.</span></li>
+        </ul>
+      </section>
+
+      <section id="utilidad" class="note-guide-section" aria-labelledby="utilidadTitle">
+        <div class="note-guide-heading">
+          <p class="eyebrow">Editor de notas</p>
+          <h2 id="utilidadTitle">Usa la utilidad en 4 pasos</h2>
+        </div>
+        <ol class="note-guide-steps">
+          <li><div><strong>Pega la nota completa.</strong><p>No borres la primera línea: contiene el jefe y la dificultad.</p></div></li>
+          <li><div><strong>Elige el jugador.</strong><p>Selecciona a quién quieres cambiarle los avisos.</p></div></li>
+          <li><div><strong>Elige qué cambiar y escribe el valor.</strong><p>Por ejemplo, elige <code>dur</code> y escribe <code>8</code> para avisar 8 segundos antes.</p></div></li>
+          <li><div><strong>Pulsa «Aplicar preferencias» y copia el resultado.</strong><p>Solo cambia los avisos de ese jugador. El resto de la nota se conserva.</p></div></li>
+        </ol>
+        <p class="note-guide-callout">¿Quieres guardar una copia? Abre «Guardar nota».</p>
+        <a class="note-guide-action" href="../herramientas/CONVERSOR_NOTAS_HEALING.html">Abrir utilidad de notas <span aria-hidden="true">→</span></a>
+      </section>
+
+      <section id="juego" class="note-guide-section note-guide-game" aria-labelledby="juegoTitle">
+        <p class="eyebrow">Dentro del juego</p>
+        <h2 id="juegoTitle">Carga la nota en NSRT</h2>
+        <ol>
+          <li>Escribe <code>/ns pr</code> en el chat.</li>
+          <li>Crea una nota personal para el jefe y la dificultad.</li>
+          <li>Pega la nota, pulsa <strong>Save</strong> y después <strong>Load</strong>.</li>
+        </ol>
+        <p>La nota personal solo la ves tú. Usa una línea distinta para cada aviso.</p>
+      </section>
+    </main>
+    <footer>Guía comunitaria no oficial. Ajusta los nombres y tiempos a tu grupo.</footer>
+  </div>
+</body>
+</html>

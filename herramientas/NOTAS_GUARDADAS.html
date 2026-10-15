@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Consulta y abre para editar las notas NSRT guardadas en este navegador.">
+  <title>Notas guardadas · NSRT</title>
+  <link rel="stylesheet" href="../Wow_healers/styles.css">
+</head>
+<body>
+  <header class="topbar"><div class="wrap topbar-inner"><a class="brand" href="../index.html">WOW <span>UTILIDADES</span></a><a href="CONVERSOR_NOTAS_HEALING.html">Crear o editar notas</a><a href="../index.html">Volver al índice</a></div></header>
+  <div class="wrap tool-shell">
+    <header class="page-head">
+      <p class="eyebrow">Biblioteca local · NSRT</p>
+      <h1>Notas guardadas</h1>
+      <p class="intro">Selecciona una nota para consultar su contenido. Desde aquí puedes abrirla en el editor.</p>
+    </header>
+
+    <main class="tool-workbench">
+      <p id="savedNoteCount" class="tool-help" role="status" aria-live="polite">Cargando notas guardadas...</p>
+      <div class="tool-controls">
+        <div>
+          <label for="savedNotesList">Notas de este navegador</label>
+          <select id="savedNotesList" size="8" disabled>
+            <option value="">No hay notas guardadas</option>
+          </select>
+        </div>
+        <button id="editSavedNoteButton" type="button" disabled>Editar nota seleccionada</button>
+      </div>
+      <label for="savedNotePreview">Contenido de la nota</label>
+      <textarea id="savedNotePreview" spellcheck="false" placeholder="Selecciona una nota guardada para verla..." readonly></textarea>
+      <p id="savedNoteStatus" class="tool-status" role="status" aria-live="polite">Las notas se guardan solo en este navegador.</p>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const savedNotesStorageKey = "wow-utilidades-nsrt-saved-notes-v1";
+      const savedNotesList = document.getElementById("savedNotesList");
+      const savedNotePreview = document.getElementById("savedNotePreview");
+      const savedNoteCount = document.getElementById("savedNoteCount");
+      const savedNoteStatus = document.getElementById("savedNoteStatus");
+      const editSavedNoteButton = document.getElementById("editSavedNoteButton");
+      let savedNotes = [];
+
+      function readSavedNotes() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(savedNotesStorageKey) || "[]");
+          if (!Array.isArray(parsed)) return [];
+          return parsed.filter(note => note
+            && typeof note.id === "string"
+            && typeof note.name === "string"
+            && typeof note.content === "string");
+        } catch {
+          savedNoteStatus.textContent = "No se puede acceder al almacenamiento de este navegador.";
+          savedNoteStatus.classList.add("error");
+          return [];
+        }
+      }
+
+      function getSelectedNote() {
+        return savedNotes.find(note => note.id === savedNotesList.value);
+      }
+
+      function showSelectedNote() {
+        const note = getSelectedNote();
+        savedNotePreview.value = note ? note.content : "";
+        editSavedNoteButton.disabled = !note;
+        savedNoteStatus.textContent = note ? `Mostrando «${note.name}».` : "Selecciona una nota para verla.";
+        savedNoteStatus.classList.remove("error");
+      }
+
+      function renderSavedNotes(selectedId = "") {
+        savedNotes = readSavedNotes();
+        savedNotesList.replaceChildren();
+        if (savedNotes.length === 0) {
+          savedNotesList.add(new Option("No hay notas guardadas", ""));
+          savedNotesList.disabled = true;
+          savedNoteCount.textContent = "Aún no hay notas guardadas en este navegador.";
+          savedNotePreview.value = "";
+          editSavedNoteButton.disabled = true;
+          return;
+        }
+
+        savedNotesList.add(new Option("Elige una nota", ""));
+        const orderedNotes = [...savedNotes].sort((left, right) => (right.updatedAt || "").localeCompare(left.updatedAt || ""));
+        for (const note of orderedNotes) {
+          const timestamp = Date.parse(note.updatedAt || "");
+          const dateLabel = Number.isNaN(timestamp) ? "" : ` · ${new Date(timestamp).toLocaleDateString("es-ES")}`;
+          savedNotesList.add(new Option(`${note.name}${dateLabel}`, note.id));
+        }
+        savedNotesList.disabled = false;
+        savedNoteCount.textContent = `${savedNotes.length} nota(s) guardada(s) en este navegador.`;
+        if (savedNotes.some(note => note.id === selectedId)) savedNotesList.value = selectedId;
+        else if (savedNotes.length === 1) savedNotesList.value = savedNotes[0].id;
+        showSelectedNote();
+      }
+
+      savedNotesList.addEventListener("change", showSelectedNote);
+      editSavedNoteButton.addEventListener("click", () => {
+        const note = getSelectedNote();
+        if (note) window.location.href = `CONVERSOR_NOTAS_HEALING.html?edit=${encodeURIComponent(note.id)}`;
+      });
+      window.addEventListener("storage", event => {
+        if (event.key === savedNotesStorageKey || event.key === null) {
+          const selectedId = savedNotesList.value;
+          renderSavedNotes(selectedId);
+        }
+      });
+
+      renderSavedNotes();
+    })();
+  </script>
+</body>
+</html>
