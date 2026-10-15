@@ -20,7 +20,7 @@
       <label for="noteInput">Nota completa</label>
       <textarea id="noteInput" spellcheck="false" placeholder="Pega aquí la nota completa de NSRT..."></textarea>
       <div id="noteEditorControls" hidden>
-      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas.</p>
+      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas. Para mostrar tu mensaje sin el icono del hechizo, combina <code>text</code> y <code>DisplayType</code> con valor <code>Text</code>.</p>
 
       <div class="tool-controls">
         <div>
@@ -45,6 +45,7 @@
               <option value="TTSTimer">TTSTimer · momento de voz</option>
               <option value="countdown">countdown · cuenta atrás</option>
               <option value="DisplayType">DisplayType · presentación</option>
+              <option value="text">text · mensaje mostrado</option>
             </select>
           </div>
           <div>
@@ -153,7 +154,8 @@
         bossSpell: "ID numérico válido del hechizo del jefe cuyo icono quieres mostrar.",
         TTSTimer: "Segundos antes del evento para reproducir la voz.",
         countdown: "Segundos para la cuenta atrás de voz.",
-        DisplayType: "Elige Text, Bar, Icon o Circle."
+        DisplayType: "Elige Text, Bar, Icon o Circle. Usa Text para que el aviso no muestre el icono del hechizo.",
+        text: "Texto que mostrará el aviso. Se guarda con la sintaxis text:tu mensaje."
       };
 
       function getSavedNoteName(note) {
@@ -222,6 +224,7 @@
         if (preference === "sound") preferenceValue.placeholder = "Nombre o ruta del sonido";
         if (preference === "colors") preferenceValue.placeholder = "1 0.5 0 o 1:0.5:0:1";
         if (preference === "glowunit") preferenceValue.placeholder = "player, raid1 o nombre";
+        if (preference === "text") preferenceValue.placeholder = "Mensaje que aparecerá";
         row.querySelector(".preference-help").textContent = preferenceHelp[preference];
       }
 
@@ -343,8 +346,9 @@
         if (fieldPattern.test(line)) {
           return line.replace(fieldPattern, (_match, separator, fieldName) => `${separator}${fieldName}:${value}`);
         }
-        const separator = line.endsWith(";") ? "" : ";";
-        return `${line}${separator}${preference}:${value}`;
+        const hasTrailingSeparator = line.endsWith(";");
+        const content = hasTrailingSeparator ? line.slice(0, -1) : line;
+        return `${content};${preference}:${value}${hasTrailingSeparator ? ";" : ""}`;
       }
 
       playerSelect.addEventListener("change", updatePreferenceRowAvailability);
