@@ -20,7 +20,7 @@
       <label for="noteInput">Nota completa</label>
       <textarea id="noteInput" spellcheck="false" placeholder="Pega aquí la nota completa de NSRT..."></textarea>
       <div id="noteEditorControls" hidden>
-      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas. Para mostrar tu mensaje sin el icono del hechizo, combina <code>text</code> y <code>DisplayType</code> con valor <code>Text</code>.</p>
+      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas y el último conjunto se recordará en este navegador. Para mostrar el nombre del hechizo, usa <code>text</code> y activa la opción de nombre automático; NSRT debe tener activada la opción <code>SpellName</code>. Para ocultar el icono, combina con <code>DisplayType</code> = <code>Text</code>.</p>
 
       <div class="tool-controls">
         <div>
@@ -37,7 +37,7 @@
             <label>Preferencia</label>
             <select class="preference-select" disabled>
               <option value="text">text · mensaje mostrado</option>
-              <option value="dur">dur · duración (segundos)</option>
+              <option value="dur" selected>dur · duración (segundos)</option>
               <option value="TTS">TTS · voz o texto hablado</option>
               <option value="sound">sound · sonido</option>
               <option value="colors">colors · color del aviso</option>
@@ -51,6 +51,10 @@
           <div>
             <label>Valor</label>
             <input class="preference-value" type="number" min="0" step="1" inputmode="numeric" disabled>
+            <label class="spell-name-option" hidden>
+              <input class="use-spell-name" type="checkbox" disabled>
+              Usar el nombre del hechizo según spellid (NSRT)
+            </label>
           </div>
           <button class="secondary remove-preference-button" type="button" aria-label="Quitar preferencia" title="Quitar preferencia" hidden disabled>-</button>
           <p class="tool-help preference-help"></p>
@@ -119,8 +123,10 @@
       let currentNote = "";
       let editingNoteId = "";
       let nextPreferenceRowId = 0;
+      let isRestoringPreferences = false;
       const maxPreferenceRows = 8;
       const savedNotesStorageKey = "wow-utilidades-nsrt-saved-notes-v1";
+      const savedPreferencesStorageKey = "wow-utilidades-nsrt-last-preferences-v1";
       let savedNotes = [];
 
       const encounterNames = {
@@ -210,14 +216,83 @@
         return [...preferenceRows.querySelectorAll("[data-preference-row]")];
       }
 
+      function readLastPreferences() {
+        try {
+          const stored = localStorage.getItem(savedPreferencesStorageKey);
+          if (!stored) return null;
+          const parsed = JSON.parse(stored);
+          const allowedPreferences = new Set(
+            [...preferenceRowTemplate.content.querySelectorAll(".preference-select option")].map(option => option.value)
+          );
+          if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > maxPreferenceRows) {
+            throw new Error("Invalid saved preference list.");
+          }
+          return parsed.map(item => {
+            if (!item
+              || !allowedPreferences.has(item.preference)
+              || typeof item.value !== "string"
+              || typeof item.useSpellName !== "boolean") {
+              throw new Error("Invalid saved preference.");
+            }
+            return {
+              preference: item.preference,
+              value: item.value,
+              useSpellName: item.useSpellName
+            };
+          });
+        } catch {
+          setStatus("No se pudieron recuperar las preferencias guardadas; se usará la configuración inicial.", true);
+          return null;
+        }
+      }
+
+      function persistLastPreferences() {
+        if (isRestoringPreferences || getPreferenceRows().length === 0) return;
+        const preferences = getPreferenceRows().map(row => ({
+          preference: row.querySelector(".preference-select").value,
+          value: row.querySelector(".preference-value").value,
+          useSpellName: row.querySelector(".use-spell-name").checked
+        }));
+        try {
+          localStorage.setItem(savedPreferencesStorageKey, JSON.stringify(preferences));
+        } catch {
+          setStatus("No se pudieron recordar las preferencias en este navegador. Comprueba el almacenamiento disponible.", true);
+        }
+      }
+
+      function restoreLastPreferences() {
+        const preferences = readLastPreferences();
+        if (!preferences) return false;
+        isRestoringPreferences = true;
+        try {
+          preferenceRows.replaceChildren();
+          for (const savedPreference of preferences) {
+            addPreferenceRow();
+            const row = getPreferenceRows()[getPreferenceRows().length - 1];
+            row.querySelector(".preference-select").value = savedPreference.preference;
+            row.querySelector(".use-spell-name").checked = savedPreference.useSpellName;
+            updatePreferenceRow(row);
+            row.querySelector(".preference-value").value = savedPreference.value;
+          }
+        } finally {
+          isRestoringPreferences = false;
+        }
+        updatePreferenceRowAvailability();
+        return true;
+      }
+
       function updatePreferenceRow(row, resetValue = false) {
         const preferenceSelect = row.querySelector(".preference-select");
         const preferenceValue = row.querySelector(".preference-value");
+        const useSpellName = row.querySelector(".use-spell-name");
         const preference = preferenceSelect.value;
         preferenceValue.type = ["dur", "TTSTimer", "countdown", "bossSpell"].includes(preference) ? "number" : "text";
         preferenceValue.min = preference === "bossSpell" ? "1" : "0";
         preferenceValue.step = "1";
-        if (resetValue) preferenceValue.value = preference === "dur" ? "20" : "";
+        if (resetValue) {
+          preferenceValue.value = preference === "dur" ? "20" : "";
+          useSpellName.checked = false;
+        }
         else if (preference === "dur" && !preferenceValue.value && !playerSelect.disabled) preferenceValue.value = "20";
         preferenceValue.placeholder = preference === "DisplayType" ? "Text / Bar / Icon / Circle" : "Valor";
         if (preference === "TTS") preferenceValue.placeholder = "false, true o frase";
@@ -225,15 +300,24 @@
         if (preference === "colors") preferenceValue.placeholder = "1 0.5 0 o 1:0.5:0:1";
         if (preference === "glowunit") preferenceValue.placeholder = "player, raid1 o nombre";
         if (preference === "text") preferenceValue.placeholder = "Mensaje que aparecerá";
-        row.querySelector(".preference-help").textContent = preferenceHelp[preference];
+        const automaticSpellName = preference === "text" && useSpellName.checked;
+        row.querySelector(".spell-name-option").hidden = preference !== "text";
+        preferenceValue.disabled = automaticSpellName || playerSelect.disabled;
+        if (automaticSpellName) preferenceValue.placeholder = "NSRT usará el nombre del spellid";
+        row.querySelector(".preference-help").textContent = automaticSpellName
+          ? "No se escribirá text: en la nota. NSRT obtendrá el nombre del spellid si SpellName está activada."
+          : preferenceHelp[preference];
       }
 
       function updatePreferenceRowAvailability() {
         const rows = getPreferenceRows();
         const hasTags = !playerSelect.disabled;
         for (const row of rows) {
+          const automaticSpellName = row.querySelector(".preference-select").value === "text"
+            && row.querySelector(".use-spell-name").checked;
           row.querySelector(".preference-select").disabled = !hasTags;
-          row.querySelector(".preference-value").disabled = !hasTags;
+          row.querySelector(".preference-value").disabled = !hasTags || automaticSpellName;
+          row.querySelector(".use-spell-name").disabled = !hasTags;
           const removeButton = row.querySelector(".remove-preference-button");
           removeButton.hidden = rows.length < 2;
           removeButton.disabled = !hasTags || rows.length === 1;
@@ -252,7 +336,15 @@
         preferenceValue.id = `preferenceValue-${rowId}`;
         row.querySelector("label").htmlFor = preferenceSelect.id;
         row.querySelectorAll("label")[1].htmlFor = preferenceValue.id;
-        preferenceSelect.addEventListener("change", () => updatePreferenceRow(row, true));
+        preferenceSelect.addEventListener("change", () => {
+          updatePreferenceRow(row, true);
+          updatePreferenceRowAvailability();
+        });
+        row.querySelector(".use-spell-name").addEventListener("change", event => {
+          if (event.target.checked) preferenceValue.value = "";
+          updatePreferenceRow(row);
+          updatePreferenceRowAvailability();
+        });
         preferenceRows.append(row);
         updatePreferenceRow(row);
         updatePreferenceRowAvailability();
@@ -317,9 +409,9 @@
         status.classList.toggle("error", isError);
       }
 
-      function validateValue(preference, value) {
-        if (!value.trim()) return "Escribe un valor para la preferencia.";
-        if (/[;\r\n]/.test(value)) return "El valor no puede contener punto y coma ni saltos de línea.";
+      function validateValue(preference, value, useSpellName) {
+        if (!(preference === "text" && useSpellName) && !value.trim()) return "Escribe un valor para la preferencia.";
+        if (value && /[;\r\n]/.test(value)) return "El valor no puede contener punto y coma ni saltos de línea.";
         if (["dur", "TTSTimer", "countdown", "bossSpell"].includes(preference)
           && !/^\d+$/.test(value)) {
           return preference === "bossSpell"
@@ -351,13 +443,28 @@
         return `${content};${preference}:${value}${hasTrailingSeparator ? ";" : ""}`;
       }
 
+      function removeField(line, fieldName) {
+        const fieldPattern = new RegExp(`^${fieldName}:`, "i");
+        return line.split(";").filter(field => !fieldPattern.test(field)).join(";");
+      }
+
       playerSelect.addEventListener("change", updatePreferenceRowAvailability);
-      addPreferenceButton.addEventListener("click", addPreferenceRow);
+      addPreferenceButton.addEventListener("click", () => {
+        addPreferenceRow();
+        persistLastPreferences();
+      });
+      preferenceRows.addEventListener("input", event => {
+        if (event.target.matches(".preference-value")) persistLastPreferences();
+      });
+      preferenceRows.addEventListener("change", event => {
+        if (event.target.matches(".preference-select, .use-spell-name")) persistLastPreferences();
+      });
       preferenceRows.addEventListener("click", event => {
         const removeButton = event.target.closest(".remove-preference-button");
         if (!removeButton || getPreferenceRows().length <= 1) return;
         removeButton.closest("[data-preference-row]").remove();
         updatePreferenceRowAvailability();
+        persistLastPreferences();
       });
 
       noteInput.addEventListener("input", () => {
@@ -445,7 +552,8 @@
         const preferences = getPreferenceRows().map((row, index) => ({
           index: index + 1,
           preference: row.querySelector(".preference-select").value,
-          value: row.querySelector(".preference-value").value.trim()
+          value: row.querySelector(".preference-value").value.trim(),
+          useSpellName: row.querySelector(".use-spell-name").checked
         }));
         const seenPreferences = new Set();
         for (const item of preferences) {
@@ -453,7 +561,7 @@
             return setStatus(`La preferencia ${item.preference} aparece más de una vez.`, true);
           }
           seenPreferences.add(item.preference);
-          const validationError = validateValue(item.preference, item.value);
+          const validationError = validateValue(item.preference, item.value, item.useSpellName);
           if (validationError) return setStatus(`Preferencia ${item.index}: ${validationError}`, true);
         }
 
@@ -466,7 +574,14 @@
           const lineTags = tagMatch ? tagMatch[1].trim().split(/\s+/) : [];
           if (!lineTags.some(tag => tag.toLocaleLowerCase() === player.toLocaleLowerCase())) continue;
           for (const item of preferences) {
-            lines[index] = replaceOrAppend(lines[index], item.preference, item.value);
+            if (item.preference === "text" && item.useSpellName) {
+              if (!/(?:^|;)spellid:\d+(?:;|$)/i.test(lines[index])) {
+                return setStatus(`El aviso de ${player} no tiene spellid; no se puede obtener el nombre del hechizo.`, true);
+              }
+              lines[index] = removeField(lines[index], "text");
+            } else {
+              lines[index] = replaceOrAppend(lines[index], item.preference, item.value);
+            }
           }
           changed += 1;
         }
@@ -479,7 +594,8 @@
         playerSelect.value = player;
         copyButton.disabled = false;
         resetButton.disabled = false;
-        setStatus(`${preferences.length} preferencia(s) aplicada(s) a ${changed} aviso(s) de ${player}.`);
+        const automaticSpellName = preferences.some(item => item.preference === "text" && item.useSpellName);
+        setStatus(`${preferences.length} preferencia(s) aplicada(s) a ${changed} aviso(s) de ${player}.${automaticSpellName ? " Activa SpellName en NSRT para mostrar el nombre." : ""}`);
       });
 
       copyButton.addEventListener("click", async () => {
@@ -505,7 +621,7 @@
 
       savedNotes = readSavedNotes();
       const requestedNoteId = new URLSearchParams(window.location.search).get("edit");
-      addPreferenceRow();
+      if (!restoreLastPreferences()) addPreferenceRow();
       const requestedNote = savedNotes.find(note => note.id === requestedNoteId);
       if (requestedNote) {
         editingNoteId = requestedNote.id;

@@ -183,6 +183,9 @@ footer .footer-source { margin: 0 0 8px; }
 }
 .tool-workbench textarea { min-height: 240px; resize: vertical; font-family: Consolas, "Courier New", monospace; font-size: .9rem; }
 .tool-workbench .preference-value { height: 43px; }
+.tool-workbench .spell-name-option { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 500; }
+.tool-workbench .spell-name-option[hidden] { display: none; }
+.tool-workbench .spell-name-option input[type="checkbox"] { width: auto; min-width: auto; padding: 0; }
 .tool-workbench textarea:focus, .tool-workbench select:focus, .tool-workbench input:focus, .tool-workbench button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .tool-controls { display: grid; grid-template-columns: minmax(160px, 1.2fr) minmax(160px, 1fr) minmax(110px, .55fr) auto; gap: 12px; align-items: end; margin: 18px 0 10px; }
 .tool-controls.preference-row { grid-template-columns: minmax(0, 1fr) minmax(140px, .7fr) auto; align-items: start; }
