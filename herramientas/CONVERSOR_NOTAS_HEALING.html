@@ -20,7 +20,7 @@
       <label for="noteInput">Nota completa</label>
       <textarea id="noteInput" spellcheck="false" placeholder="Pega aquí la nota completa de NSRT..."></textarea>
       <div id="noteEditorControls" hidden>
-      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas y el último conjunto se recordará en este navegador. Para mostrar el nombre del hechizo, usa <code>text</code> y activa la opción de nombre automático; NSRT debe tener activada la opción <code>SpellName</code>. Para ocultar el icono, combina con <code>DisplayType</code> = <code>Text</code>.</p>
+      <p class="tool-help">Se detectan jugadores/etiquetas de avisos temporizados con <code>tag:</code>. Añade entre 1 y 8 preferencias; se aplicarán juntas y el último conjunto y jugador elegido se recordarán en este navegador. Para mostrar el nombre del hechizo, usa <code>text</code> y activa la opción de nombre automático; NSRT debe tener activada la opción <code>SpellName</code>. Para ocultar el icono, combina con <code>DisplayType</code> = <code>Text</code>.</p>
 
       <div class="tool-controls">
         <div>
@@ -127,6 +127,7 @@
       const maxPreferenceRows = 8;
       const savedNotesStorageKey = "wow-utilidades-nsrt-saved-notes-v1";
       const savedPreferencesStorageKey = "wow-utilidades-nsrt-last-preferences-v1";
+      const lastPlayerStorageKey = "wow-utilidades-nsrt-last-player-v1";
       let savedNotes = [];
 
       const encounterNames = {
@@ -260,6 +261,24 @@
         }
       }
 
+      function readLastPlayer() {
+        try {
+          return localStorage.getItem(lastPlayerStorageKey) || "";
+        } catch {
+          setStatus("No se pudo recuperar el último jugador guardado en este navegador.", true);
+          return "";
+        }
+      }
+
+      function persistLastPlayer(player) {
+        if (!player) return;
+        try {
+          localStorage.setItem(lastPlayerStorageKey, player);
+        } catch {
+          setStatus("No se pudo recordar el último jugador en este navegador. Comprueba el almacenamiento disponible.", true);
+        }
+      }
+
       function restoreLastPreferences() {
         const preferences = readLastPreferences();
         if (!preferences) return false;
@@ -386,6 +405,7 @@
 
       function updatePlayerOptions(note) {
         const previousPlayer = playerSelect.value;
+        const lastPlayer = readLastPlayer();
         const tags = getTags(note);
         playerSelect.replaceChildren();
         if (tags.length === 0) {
@@ -399,7 +419,9 @@
         for (const tag of tags) playerSelect.add(new Option(tag, tag));
         playerSelect.disabled = false;
         if (tags.includes(previousPlayer)) playerSelect.value = previousPlayer;
+        else if (tags.includes(lastPlayer)) playerSelect.value = lastPlayer;
         else if (tags.length === 1) playerSelect.value = tags[0];
+        persistLastPlayer(playerSelect.value);
         for (const row of getPreferenceRows()) updatePreferenceRow(row);
         updatePreferenceRowAvailability();
       }
@@ -448,7 +470,10 @@
         return line.split(";").filter(field => !fieldPattern.test(field)).join(";");
       }
 
-      playerSelect.addEventListener("change", updatePreferenceRowAvailability);
+      playerSelect.addEventListener("change", () => {
+        updatePreferenceRowAvailability();
+        persistLastPlayer(playerSelect.value);
+      });
       addPreferenceButton.addEventListener("click", () => {
         addPreferenceRow();
         persistLastPreferences();
